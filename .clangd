@@ -1,2 +1,17 @@
 CompileFlags:
     Remove: [-f*, -m*]
+    Add:
+        - "-I${workspaceFolder}/main/include"
+        - "-I${workspaceFolder}/build/config"
+        - "-DESP_PLATFORM"
+        - "-DIDF_VER=v6.0.2"
+
+InlayHints:
+    Enabled: true
+    ParameterHints: true
+    TypeHints: true
+    DeducedTypes: true
+
+Hover:
+    ShowAKA: true
+
