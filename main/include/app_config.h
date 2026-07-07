@@ -122,9 +122,5 @@
 #define NVS_SAVE_DELAY_IDLE_MS      30000
 #define NVS_SAVE_DELAY_URGENT_MS    10000
 
-/* Slump graph (~12 bytes/point heap).
- * C3: ~200KB RAM → safe max ~12000
- * C6: ~244KB RAM → safe max ~16000
- */
 #define SLUMP_GRAPH_MAX_POINTS      40000
 #define BONUS_HISTORY_MAX           32
