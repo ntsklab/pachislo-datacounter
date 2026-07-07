@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "author": "ntsklab",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-xiao-esp32-c6",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled",
+      "top": -90,
+      "left": 130,
+      "attrs": {
+        "i2cAddress": "0x3c"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_in_medal",
+      "top": 110,
+      "left": -170,
+      "attrs": {
+        "label": "MEDAL IN",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_out_medal",
+      "top": 110,
+      "left": -70,
+      "attrs": {
+        "label": "MEDAL OUT",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_page",
+      "top": -145,
+      "left": -40,
+      "attrs": {
+        "label": "PAGE",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "sw_bonus1",
+      "top": 110,
+      "left": 30,
+      "attrs": {
+        "value": "1",
+        "label": "BONUS1",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "sw_bonus2",
+      "top": 110,
+      "left": 120,
+      "attrs": {
+        "value": "1",
+        "label": "BONUS2",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "sw_door",
+      "top": 110,
+      "left": 210,
+      "attrs": {
+        "value": "1",
+        "label": "DOOR",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "sw_error",
+      "top": 110,
+      "left": 300,
+      "attrs": {
+        "value": "1",
+        "label": "ERROR",
+        "bounce": "0"
+      }
+    }
+  ],
+  "connections": [
+    [ "esp:5V", "oled:VCC", "red", [ "h24", "v-8" ] ],
+    [ "esp:GND", "oled:GND", "black", [ "h32", "v8" ] ],
+    [ "esp:D9", "oled:SDA", "green", [ "h28", "v-18" ] ],
+    [ "esp:D10", "oled:SCL", "blue", [ "h20", "v-28" ] ],
+    [ "esp:D0", "btn_in_medal:1.l", "green" ],
+    [ "esp:GND", "btn_in_medal:2.l", "black" ],
+    [ "esp:D1", "btn_out_medal:1.l", "green" ],
+    [ "esp:GND", "btn_out_medal:2.l", "black" ],
+    [ "esp:D6", "btn_page:1.l", "yellow" ],
+    [ "esp:GND", "btn_page:2.l", "black" ],
+    [ "esp:GND", "sw_bonus1:1", "black" ],
+    [ "esp:D2", "sw_bonus1:2", "green" ],
+    [ "esp:GND", "sw_bonus2:1", "black" ],
+    [ "esp:D3", "sw_bonus2:2", "green" ],
+    [ "esp:GND", "sw_door:1", "black" ],
+    [ "esp:D4", "sw_door:2", "green" ],
+    [ "esp:GND", "sw_error:1", "black" ],
+    [ "esp:D5", "sw_error:2", "green" ]
+  ]
+}
