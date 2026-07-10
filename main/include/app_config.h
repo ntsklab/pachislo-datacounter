@@ -123,4 +123,4 @@
 #define NVS_SAVE_DELAY_URGENT_MS    10000
 
 #define SLUMP_GRAPH_MAX_POINTS      40000
-#define BONUS_HISTORY_MAX           32
+#define BONUS_HISTORY_MAX           8

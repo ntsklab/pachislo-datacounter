@@ -1,6 +1,7 @@
 #include "display_manager.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "app_config.h"
@@ -109,10 +110,9 @@ static void draw_slump_graph(const counter_stats_t *stats, int x, int y, int w, 
         return;
     }
     
-    // Decompress slump points
     int32_t running_diff = 0;
     
-    // Pass 1: find min/max
+    // Pass 1: find min/max over all data
     int32_t min_diff = 0, max_diff = 0;
     for (uint32_t i = 0; i < stats->slump_graph_count; i++) {
         running_diff += stats->slump_graph[i].delta;
@@ -123,56 +123,43 @@ static void draw_slump_graph(const counter_stats_t *stats, int x, int y, int w, 
     int32_t range = max_diff - min_diff;
     if (range == 0) range = 1;
     
-    // 縦軸のラベル表示エリア（左側20px）
     int label_width = 20;
     int graph_x = x + label_width;
     int graph_w = w - label_width;
     
-    // 縦軸のラベル表示
     u8g2_SetFont(&s_u8g2, u8g2_font_5x7_tr);
     char buf[10];
     
-    // 最大値（上）
     snprintf(buf, sizeof(buf), "%ld", (long)max_diff);
     u8g2_DrawStr(&s_u8g2, x, y + 8, buf);
     
-    // 最小値（下）
     snprintf(buf, sizeof(buf), "%ld", (long)min_diff);
     u8g2_DrawStr(&s_u8g2, x, y + h - 2, buf);
     
-    // 0ラインの表示（範囲内にある場合）
     if (min_diff < 0 && max_diff > 0) {
         int zero_y = y + h - 1 - (int)((0 - min_diff) * (h - 2) / range);
         u8g2_DrawHLine(&s_u8g2, graph_x, zero_y, graph_w);
     }
     
-    // グラフエリアの枠
     u8g2_DrawFrame(&s_u8g2, graph_x, y, graph_w, h);
     
-    // ボーナス区間の反転表示
-    running_diff = 0;
-    for (uint32_t i = 0; i < stats->slump_graph_count; i++) {
-        if (stats->slump_graph[i].flags & SLUMP_FLAG_BONUS) {
-            int px = graph_x + 1 + (int)(i * (graph_w - 2) / (stats->slump_graph_count - 1));
-            u8g2_DrawVLine(&s_u8g2, px, y + 1, h - 2);
-        }
-        running_diff += stats->slump_graph[i].delta;
-    }
-    
-    // Draw graph lines
+    // Determine visible window
     uint32_t start_idx = 0;
-    if (stats->slump_graph_count > (uint32_t)graph_w) {
-        start_idx = stats->slump_graph_count - graph_w;
+    if (stats->slump_graph_count > SLUMP_GRAPH_MAX_POINTS) {
+        start_idx = stats->slump_graph_count - SLUMP_GRAPH_MAX_POINTS;
     }
-    
     uint32_t point_count = stats->slump_graph_count - start_idx;
     
+    // Helper: compute (x,y) position for relative index i
+    #define GRAPH_PX(i) (graph_x + 1 + (int)((uint32_t)(i) * ((uint32_t)(graph_w) - 2) / (point_count - 1)))
+    #define GRAPH_PY(diff) (y + h - 1 - (int)(((diff) - min_diff) * ((uint32_t)(h) - 2) / range))
+    
+    // Pass A: draw bonus white background rectangles
     running_diff = 0;
-    int prev_x = 0, prev_y = 0;
+    uint32_t block_start = UINT32_MAX;
+    int block_x0 = 0;
     for (uint32_t i = 0; i < point_count; i++) {
         uint32_t idx = start_idx + i;
-        
-        // Accumulate delta up to this index
         if (i == 0) {
             running_diff = 0;
             for (uint32_t j = 0; j <= idx; j++) {
@@ -181,16 +168,75 @@ static void draw_slump_graph(const counter_stats_t *stats, int x, int y, int w, 
         } else {
             running_diff += stats->slump_graph[idx].delta;
         }
+        int px = GRAPH_PX(i);
+        bool is_bonus = (stats->slump_graph[idx].flags & SLUMP_FLAG_BONUS) != 0;
         
-        int px = graph_x + 1 + (int)(i * (graph_w - 2) / (point_count - 1));
-        int py = y + h - 1 - (int)((running_diff - min_diff) * (h - 2) / range);
-        
+        if (is_bonus && block_start == UINT32_MAX) {
+            block_start = i;
+            block_x0 = px;
+        }
+        if (!is_bonus && block_start != UINT32_MAX) {
+            u8g2_DrawBox(&s_u8g2, block_x0, y + 1, px - block_x0, h - 2);
+            block_start = UINT32_MAX;
+        }
+    }
+    if (block_start != UINT32_MAX) {
+        int final_x = GRAPH_PX(point_count - 1);
+        u8g2_DrawBox(&s_u8g2, block_x0, y + 1, final_x - block_x0 + 1, h - 2);
+    }
+    
+    // Pass B: draw all lines in white
+    running_diff = 0;
+    int prev_x = 0, prev_y = 0;
+    u8g2_SetDrawColor(&s_u8g2, 1);
+    for (uint32_t i = 0; i < point_count; i++) {
+        uint32_t idx = start_idx + i;
+        if (i == 0) {
+            running_diff = 0;
+            for (uint32_t j = 0; j <= idx; j++) {
+                running_diff += stats->slump_graph[j].delta;
+            }
+        } else {
+            running_diff += stats->slump_graph[idx].delta;
+        }
+        int px = GRAPH_PX(i);
+        int py = GRAPH_PY(running_diff);
         if (i > 0) {
             u8g2_DrawLine(&s_u8g2, prev_x, prev_y, px, py);
         }
         prev_x = px;
         prev_y = py;
     }
+    
+    // Pass C: redraw bonus-only segments in black
+    running_diff = 0;
+    prev_x = 0; prev_y = 0;
+    bool prev_bonus = false;
+    u8g2_SetDrawColor(&s_u8g2, 0);
+    for (uint32_t i = 0; i < point_count; i++) {
+        uint32_t idx = start_idx + i;
+        if (i == 0) {
+            running_diff = 0;
+            for (uint32_t j = 0; j <= idx; j++) {
+                running_diff += stats->slump_graph[j].delta;
+            }
+        } else {
+            running_diff += stats->slump_graph[idx].delta;
+        }
+        int px = GRAPH_PX(i);
+        int py = GRAPH_PY(running_diff);
+        bool cur_bonus = (stats->slump_graph[idx].flags & SLUMP_FLAG_BONUS) != 0;
+        if (i > 0 && prev_bonus && cur_bonus) {
+            u8g2_DrawLine(&s_u8g2, prev_x, prev_y, px, py);
+        }
+        prev_x = px;
+        prev_y = py;
+        prev_bonus = cur_bonus;
+    }
+    u8g2_SetDrawColor(&s_u8g2, 1);
+    
+    #undef GRAPH_PX
+    #undef GRAPH_PY
 }
 
 static void draw_bonus_history(const counter_stats_t *stats, int x, int y, int w, int h)
@@ -201,7 +247,6 @@ static void draw_bonus_history(const counter_stats_t *stats, int x, int y, int w
         return;
     }
     
-    // Find max interval for scaling (cap at 1000)
     uint32_t max_interval = 1000;
     for (uint32_t i = 0; i < stats->bonus_history_count; i++) {
         if (stats->bonus_history[i].interval_games > max_interval) {
@@ -210,18 +255,18 @@ static void draw_bonus_history(const counter_stats_t *stats, int x, int y, int w
     }
     if (max_interval == 0) max_interval = 1;
     
-    // 下部のラベルエリア（16px）
     int graph_h = h - 16;
     
-    // Draw border
     u8g2_DrawFrame(&s_u8g2, x, y, w, graph_h);
     
-    // Draw bars
     uint32_t bar_width = (w - 2) / stats->bonus_history_count;
     if (bar_width < 2) bar_width = 2;
     if (bar_width > 8) bar_width = 8;
     
     u8g2_SetFont(&s_u8g2, u8g2_font_5x7_tr);
+    
+    const char *label1 = BONUS1_LABEL;
+    const char *label2 = BONUS2_LABEL;
     
     for (uint32_t i = 0; i < stats->bonus_history_count; i++) {
         uint32_t interval = stats->bonus_history[i].interval_games;
@@ -230,34 +275,43 @@ static void draw_bonus_history(const counter_stats_t *stats, int x, int y, int w
         int bar_height = (int)((uint64_t)interval * (graph_h - 4) / max_interval);
         if (bar_height < 1) bar_height = 1;
         
-        int bar_x = x + 1 + (int)(i * (w - 2) / stats->bonus_history_count);
+        uint32_t rev_i = stats->bonus_history_count - 1 - i;
+        int bar_x = x + 1 + (int)(rev_i * (w - 2) / stats->bonus_history_count);
         int bar_y = y + graph_h - 2 - bar_height;
         
-        // Draw bar with pattern based on bonus type
+        // N-back number
+        char nbuf[4];
+        snprintf(nbuf, sizeof(nbuf), "%lu", (unsigned long)(rev_i + 1));
+        u8g2_DrawStr(&s_u8g2, bar_x, y - 4, nbuf);
+        
+        // Game count above bar
+        char num_buf[12];
+        if (stats->bonus_history[i].interval_games >= 1000) {
+            snprintf(num_buf, sizeof(num_buf), "%lu",
+                     (unsigned long)(stats->bonus_history[i].interval_games / 100));
+        } else {
+            snprintf(num_buf, sizeof(num_buf), "%lu",
+                     (unsigned long)stats->bonus_history[i].interval_games);
+        }
+        u8g2_DrawStr(&s_u8g2, bar_x, bar_y - 2, num_buf);
+        
         if (stats->bonus_history[i].bonus_type == 1) {
-            // BONUS1 - filled bar
             u8g2_DrawBox(&s_u8g2, bar_x, bar_y, bar_width - 1, bar_height);
         } else {
-            // BONUS2 - outlined bar
             u8g2_DrawFrame(&s_u8g2, bar_x, bar_y, bar_width - 1, bar_height);
         }
         
-        // ボーナス種別を棒の上にマーク表示
-        char type_mark = (stats->bonus_history[i].bonus_type == 1) ? '1' : '2';
-        char mark_str[2] = {type_mark, '\0'};
-        u8g2_DrawStr(&s_u8g2, bar_x, bar_y - 2, mark_str);
-        
-        // ゲーム数を棒の下に表示（回転して表示）
-        char num_buf[12];
-        snprintf(num_buf, sizeof(num_buf), "%lu", (unsigned long)stats->bonus_history[i].interval_games);
-        // 短い数字だけ表示
-        if (strlen(num_buf) <= 4) {
-            u8g2_DrawStr(&s_u8g2, bar_x, y + graph_h + 10, num_buf);
+        char label_buf[4];
+        if (stats->bonus_history[i].bonus_type == 1) {
+            label_buf[0] = label1[0];
+            label_buf[1] = label1[1] ? label1[1] : ' ';
+            label_buf[2] = '\0';
         } else {
-            // 長い場合は省略
-            snprintf(num_buf, sizeof(num_buf), "%lu", (unsigned long)(stats->bonus_history[i].interval_games / 100));
-            u8g2_DrawStr(&s_u8g2, bar_x, y + graph_h + 10, num_buf);
+            label_buf[0] = label2[0];
+            label_buf[1] = label2[1] ? label2[1] : ' ';
+            label_buf[2] = '\0';
         }
+        u8g2_DrawStr(&s_u8g2, bar_x, y + graph_h + 10, label_buf);
     }
 }
 

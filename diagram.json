@@ -92,6 +92,35 @@
         "label": "ERROR",
         "bounce": "0"
       }
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "sw_osc_in",
+      "top": 190,
+      "left": -170,
+      "attrs": {
+        "value": "1",
+        "label": "OSC IN"
+      }
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "sw_osc_out",
+      "top": 190,
+      "left": -70,
+      "attrs": {
+        "value": "1",
+        "label": "OSC OUT"
+      }
+    },
+    {
+      "type": "wokwi-clock-generator",
+      "id": "clkgen",
+      "top": 230,
+      "left": -140,
+      "attrs": {
+        "frequency": "10 Hz"
+      }
     }
   ],
   "connections": [
@@ -112,6 +141,10 @@
     [ "esp:GND", "sw_door:1", "black" ],
     [ "esp:D4", "sw_door:2", "green" ],
     [ "esp:GND", "sw_error:1", "black" ],
-    [ "esp:D5", "sw_error:2", "green" ]
+    [ "esp:D5", "sw_error:2", "green" ],
+    [ "clkgen:CLK", "sw_osc_in:1", "green" ],
+    [ "clkgen:CLK", "sw_osc_out:1", "green" ],
+    [ "sw_osc_in:2", "esp:D0", "green" ],
+    [ "sw_osc_out:2", "esp:D1", "green" ]
   ]
 }
