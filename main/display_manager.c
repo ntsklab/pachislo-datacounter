@@ -239,15 +239,18 @@ static void draw_slump_graph(const counter_stats_t *stats, int x, int y, int w, 
     #undef GRAPH_PY
 }
 
-static void draw_bonus_history(const counter_stats_t *stats, int x, int y, int w, int h)
+static void draw_bonus_history(const counter_stats_t *stats, int x, int y, int w, int h, bool show_labels)
 {
-    if (stats->bonus_history_count == 0) {
+    if (stats->current_interval == 0 && stats->bonus_history_count == 0) {
         u8g2_SetFont(&s_u8g2, u8g2_font_unifont_t_japanese1);
         u8g2_DrawUTF8(&s_u8g2, x + w/2 - 30, y + h/2 + 5, "データなし");
         return;
     }
     
+    int total_bars = stats->bonus_history_count + 1;  // +1 for current (0)
+    
     uint32_t max_interval = 1000;
+    if (stats->current_interval > max_interval) max_interval = stats->current_interval;
     for (uint32_t i = 0; i < stats->bonus_history_count; i++) {
         if (stats->bonus_history[i].interval_games > max_interval) {
             max_interval = stats->bonus_history[i].interval_games;
@@ -259,7 +262,7 @@ static void draw_bonus_history(const counter_stats_t *stats, int x, int y, int w
     
     u8g2_DrawFrame(&s_u8g2, x, y, w, graph_h);
     
-    uint32_t bar_width = (w - 2) / stats->bonus_history_count;
+    uint32_t bar_width = (w - 2) / total_bars;
     if (bar_width < 2) bar_width = 2;
     if (bar_width > 8) bar_width = 8;
     
@@ -268,50 +271,80 @@ static void draw_bonus_history(const counter_stats_t *stats, int x, int y, int w
     const char *label1 = BONUS1_LABEL;
     const char *label2 = BONUS2_LABEL;
     
-    for (uint32_t i = 0; i < stats->bonus_history_count; i++) {
-        uint32_t interval = stats->bonus_history[i].interval_games;
-        if (interval > 1000) interval = 1000;
+    // Blink state for "0" bar during bonus (500ms)
+    bool blink_on = false;
+    if (stats->bonus_active) {
+        blink_on = ((esp_timer_get_time() / 500000LL) & 1) != 0;
+    }
+    
+    for (int bar_idx = 0; bar_idx < total_bars; bar_idx++) {
+        uint32_t interval;
+        uint8_t bonus_type;
         
-        int bar_height = (int)((uint64_t)interval * (graph_h - 4) / max_interval);
+        if (bar_idx == 0) {
+            interval = stats->current_interval;
+            bonus_type = 0;
+        } else {
+            uint32_t hist_i = stats->bonus_history_count - bar_idx;
+            interval = stats->bonus_history[hist_i].interval_games;
+            bonus_type = stats->bonus_history[hist_i].bonus_type;
+        }
+        
+        uint32_t capped = (interval > 1000) ? 1000 : interval;
+        int bar_height = (int)((uint64_t)capped * (graph_h - 4) / max_interval);
         if (bar_height < 1) bar_height = 1;
         
-        uint32_t rev_i = stats->bonus_history_count - 1 - i;
-        int bar_x = x + 1 + (int)(rev_i * (w - 2) / stats->bonus_history_count);
+        int bar_x = x + 1 + (int)(bar_idx * (w - 2) / total_bars);
         int bar_y = y + graph_h - 2 - bar_height;
         
+        // 0 bar blink: skip drawing during "on" phase
+        bool skip = (bar_idx == 0 && blink_on);
+        
+        int stagger = (bar_idx % 2) * 6;
+        
         // N-back number
-        char nbuf[4];
-        snprintf(nbuf, sizeof(nbuf), "%lu", (unsigned long)(rev_i + 1));
-        u8g2_DrawStr(&s_u8g2, bar_x, y - 4, nbuf);
+        char nbuf[12];
+        snprintf(nbuf, sizeof(nbuf), "%u", (unsigned int)bar_idx);
+        if (!skip && show_labels) {
+            u8g2_DrawStr(&s_u8g2, bar_x, y - 4, nbuf);
+        }
         
-        // Game count above bar
+        // Game count / interval above bar
+        uint32_t display_val = (bar_idx == 0) ? stats->current_interval : 
+            stats->bonus_history[stats->bonus_history_count - bar_idx].interval_games;
         char num_buf[12];
-        if (stats->bonus_history[i].interval_games >= 1000) {
-            snprintf(num_buf, sizeof(num_buf), "%lu",
-                     (unsigned long)(stats->bonus_history[i].interval_games / 100));
+        if (display_val >= 1000) {
+            snprintf(num_buf, sizeof(num_buf), "%lu", (unsigned long)(display_val / 100));
         } else {
-            snprintf(num_buf, sizeof(num_buf), "%lu",
-                     (unsigned long)stats->bonus_history[i].interval_games);
+            snprintf(num_buf, sizeof(num_buf), "%lu", (unsigned long)display_val);
         }
-        u8g2_DrawStr(&s_u8g2, bar_x, bar_y - 2, num_buf);
-        
-        if (stats->bonus_history[i].bonus_type == 1) {
-            u8g2_DrawBox(&s_u8g2, bar_x, bar_y, bar_width - 1, bar_height);
-        } else {
-            u8g2_DrawFrame(&s_u8g2, bar_x, bar_y, bar_width - 1, bar_height);
+        if (!skip && show_labels) {
+            u8g2_DrawStr(&s_u8g2, bar_x, bar_y - 2 - stagger, num_buf);
         }
         
-        char label_buf[4];
-        if (stats->bonus_history[i].bonus_type == 1) {
-            label_buf[0] = label1[0];
-            label_buf[1] = label1[1] ? label1[1] : ' ';
-            label_buf[2] = '\0';
-        } else {
-            label_buf[0] = label2[0];
-            label_buf[1] = label2[1] ? label2[1] : ' ';
-            label_buf[2] = '\0';
+        // Bar
+        if (!skip) {
+            if (bar_idx == 0 || bonus_type == 1) {
+                u8g2_DrawBox(&s_u8g2, bar_x, bar_y, bar_width - 1, bar_height);
+            } else {
+                u8g2_DrawFrame(&s_u8g2, bar_x, bar_y, bar_width - 1, bar_height);
+            }
         }
-        u8g2_DrawStr(&s_u8g2, bar_x, y + graph_h + 10, label_buf);
+        
+        // Bonus type label below graph
+        if (bar_idx > 0 && !skip) {
+            char label_buf[4];
+            if (bonus_type == 1) {
+                label_buf[0] = label1[0];
+                label_buf[1] = label1[1] ? label1[1] : ' ';
+                label_buf[2] = '\0';
+            } else {
+                label_buf[0] = label2[0];
+                label_buf[1] = label2[1] ? label2[1] : ' ';
+                label_buf[2] = '\0';
+            }
+            u8g2_DrawStr(&s_u8g2, bar_x, y + graph_h + 10 + stagger, label_buf);
+        }
     }
 }
 
@@ -605,7 +638,7 @@ void display_manager_render(const counter_stats_t *stats, const char *ip_addr, b
         draw_slump_graph(stats, 0, 16, OLED_WIDTH, OLED_HEIGHT - 16);
     } else if (s_page == 4) {
         // Bonus history page
-        draw_bonus_history(stats, 0, 16, OLED_WIDTH, OLED_HEIGHT - 16);
+        draw_bonus_history(stats, 0, 16, OLED_WIDTH, OLED_HEIGHT - 16, !show_title);
     } else if (show_title) {
         draw_utf8_scrolling(0, 30, line0, now_us);
         draw_utf8_scrolling(1, 46, line1, now_us);
@@ -628,6 +661,37 @@ void display_manager_render(const counter_stats_t *stats, const char *ip_addr, b
 
     if (s_page == 0) {
         draw_wifi_icon(OLED_WIDTH - 16, 0, wifi_connected, wifi_rssi);
+        
+        // Bonus label blink (500ms invert per active label)
+        if (stats->bonus_active && s_line_scroll_px[1] == 0) {
+            bool bonus_blink = ((esp_timer_get_time() / 500000LL) & 1) != 0;
+            if (bonus_blink) {
+                char c1[16];
+                snprintf(c1, sizeof(c1), "%lu", (unsigned long)stats->bonus1_count);
+                u8g2_SetFont(&s_u8g2, u8g2_font_unifont_t_japanese1);
+                int l1w = u8g2_GetUTF8Width(&s_u8g2, BONUS1_LABEL);
+                int l2w = u8g2_GetUTF8Width(&s_u8g2, BONUS2_LABEL);
+                int colon_w = u8g2_GetUTF8Width(&s_u8g2, ":");
+                int c1w = u8g2_GetUTF8Width(&s_u8g2, c1);
+                int sp_w = u8g2_GetUTF8Width(&s_u8g2, " ");
+                int line1_y = show_title ? 46 : 30;
+                int y_top = line1_y - 14;
+
+                if (stats->bonus1_active) {
+                    u8g2_DrawBox(&s_u8g2, 0, y_top, l1w, 16);
+                    u8g2_SetDrawColor(&s_u8g2, 0);
+                    u8g2_DrawUTF8(&s_u8g2, 0, line1_y, BONUS1_LABEL);
+                    u8g2_SetDrawColor(&s_u8g2, 1);
+                }
+                if (stats->bonus2_active) {
+                    int x2 = l1w + colon_w + c1w + sp_w;
+                    u8g2_DrawBox(&s_u8g2, x2, y_top, l2w, 16);
+                    u8g2_SetDrawColor(&s_u8g2, 0);
+                    u8g2_DrawUTF8(&s_u8g2, x2, line1_y, BONUS2_LABEL);
+                    u8g2_SetDrawColor(&s_u8g2, 1);
+                }
+            }
+        }
         
         // NVS save indicator (bottom-right corner)
         if (s_nvs_saving) {

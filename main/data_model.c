@@ -18,6 +18,7 @@ static uint32_t s_game_start_in_medal;
 static bool s_has_pending_medal;
 static uint32_t s_normal_games;
 static uint32_t s_total_games;
+static uint32_t s_cumulative_normal_games;
 static uint32_t s_games_since_last_bonus;
 static uint8_t s_last_bonus_type;
 static int32_t s_last_recorded_diff;  // 最後に記録した diff_medal
@@ -37,7 +38,8 @@ static void recalc_diff_locked(void)
     s_stats.bonus2_active = s_bonus2_active;
     s_stats.total_games = s_normal_games;
     s_stats.total_games_including_bonus = s_total_games;
-    s_stats.total_games_excluding_bonus = s_normal_games;
+    s_stats.total_games_excluding_bonus = s_cumulative_normal_games;
+    s_stats.current_interval = s_games_since_last_bonus;
     s_dirty = true;
 }
 
@@ -82,6 +84,7 @@ static void count_game_locked(void)
         s_total_games += games_to_add;
         if (!is_bonus) {
             s_normal_games += games_to_add;
+            s_cumulative_normal_games += games_to_add;
             s_games_since_last_bonus += games_to_add;
         }
         s_games_since_save += games_to_add;
@@ -116,6 +119,7 @@ void data_model_init(void)
     s_game_start_in_medal = 0;
     s_has_pending_medal = false;
     s_normal_games = 0;
+    s_cumulative_normal_games = 0;
     s_total_games = 0;
     s_games_since_last_bonus = 0;
     s_last_bonus_type = 0;
@@ -281,6 +285,7 @@ void data_model_set_stats(const counter_stats_t *stats)
     s_stats.total_games = stats->total_games;
     s_stats.total_games_including_bonus = stats->total_games_including_bonus;
     s_stats.total_games_excluding_bonus = stats->total_games_excluding_bonus;
+    s_cumulative_normal_games = stats->total_games_excluding_bonus;
     s_stats.in_medal = stats->in_medal;
     s_stats.out_medal = stats->out_medal;
     s_stats.bonus1_count = stats->bonus1_count;

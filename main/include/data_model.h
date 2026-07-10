@@ -52,6 +52,9 @@ typedef struct {
     // ボーナス履歴
     bonus_history_entry_t *bonus_history;
     uint16_t bonus_history_count;
+    
+    // 現在のボーナス間隔（前回ボーナス終了からの回転数）
+    uint16_t current_interval;
 } counter_stats_t;
 
 typedef enum {
