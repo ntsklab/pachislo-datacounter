@@ -546,7 +546,7 @@ void display_manager_render(const counter_stats_t *stats, const char *ip_addr, b
         u8g2_SetFont(&s_u8g2, u8g2_font_unifont_t_japanese1);
         u8g2_DrawUTF8(&s_u8g2, 0, 20, "PACHISLO COUNTER");
         u8g2_DrawUTF8(&s_u8g2, 0, 40, "起動中...");
-        u8g2_DrawUTF8(&s_u8g2, 0, 60, "v2026.07.06");
+        u8g2_DrawUTF8(&s_u8g2, 0, 60, FIRMWARE_VERSION);
         u8g2_SendBuffer(&s_u8g2);
         return;
     }

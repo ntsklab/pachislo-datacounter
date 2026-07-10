@@ -122,5 +122,7 @@
 #define NVS_SAVE_DELAY_IDLE_MS      30000
 #define NVS_SAVE_DELAY_URGENT_MS    10000
 
+#define FIRMWARE_VERSION        "v2026.07.11"
+
 #define SLUMP_GRAPH_MAX_POINTS      40000
 #define BONUS_HISTORY_MAX           8
